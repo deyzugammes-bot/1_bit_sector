@@ -1,7 +1,11 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
+const __perfUA = navigator.userAgent || '';
+const __perfLite = window.matchMedia?.('(max-width: 700px)')?.matches || /Firefox|Telegram|; wv\)/i.test(__perfUA) || ((navigator.hardwareConcurrency||8) <= 4);
+window.__PERF_LITE__ = !!__perfLite;
+document.documentElement.classList.toggle('perf-lite', !!__perfLite);
 function resizeCanvas() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = Math.min(window.devicePixelRatio || 1, __perfLite ? 1.25 : 2);
     const W = window.innerWidth;
     const H = window.innerHeight;
     canvas.width = Math.floor(W * dpr);
@@ -2323,7 +2327,8 @@ setInterval(() => {
     });
 }, 1500);
 
-function gameLoop() {
+let __lastHudRefresh = 0;
+function gameLoop(now=performance.now()) {
     telemetryFrameTick();
     let MAIN_C = THEMES[currentThemeIdx].color;
     ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
@@ -2331,14 +2336,19 @@ function gameLoop() {
     ctx.save();
     let isPlaying = (gameState === 'playing');
     
-    let hudLevelEl = document.getElementById('hudLevel');
-    let hudDMEl = document.getElementById('hudDM');
-    let hudProtocolsEl = document.getElementById('hudProtocols');
-    if (hudProtocolsEl) { const v=`PROTO: ${totalProtocolStacks()}`; if(hudProtocolsEl.textContent!==v) hudProtocolsEl.textContent=v; }
-    if (hudLevelEl) { const mark=currentSectorEvent?.kind==='boss'?' [BOSS]':(currentSectorEvent?.kind==='event'?' *':''); const ffa=(window.currentLevelConfig?.botCount||1)>=2?` FFA${(window.currentLevelConfig.botCount||1)+1}`:''; const v=`СЕКТОР: ${String(currentLevel).padStart(3,'0')}${mark}${ffa}`; if(hudLevelEl.textContent!==v) hudLevelEl.textContent=v; }
-    if (hudDMEl) {
-        const v=(runMatter > 0 && isPlaying)?`✦ ${darkMatter} [RUN +${runMatter}]`:`✦ ${darkMatter}`;
-        if(hudDMEl.textContent!==v) hudDMEl.textContent=v;
+    // DOM writes every frame are expensive in Telegram WebView/Firefox.
+    // HUD only needs a few updates per second; gameplay canvas still renders normally.
+    if (now - __lastHudRefresh > 220) {
+        __lastHudRefresh = now;
+        let hudLevelEl = document.getElementById('hudLevel');
+        let hudDMEl = document.getElementById('hudDM');
+        let hudProtocolsEl = document.getElementById('hudProtocols');
+        if (hudProtocolsEl) { const v=`PROTO: ${totalProtocolStacks()}`; if(hudProtocolsEl.textContent!==v) hudProtocolsEl.textContent=v; }
+        if (hudLevelEl) { const mark=currentSectorEvent?.kind==='boss'?' [BOSS]':(currentSectorEvent?.kind==='event'?' *':''); const ffa=(window.currentLevelConfig?.botCount||1)>=2?` FFA${(window.currentLevelConfig.botCount||1)+1}`:''; const v=`СЕКТОР: ${String(currentLevel).padStart(3,'0')}${mark}${ffa}`; if(hudLevelEl.textContent!==v) hudLevelEl.textContent=v; }
+        if (hudDMEl) {
+            const v=(runMatter > 0 && isPlaying)?`✦ ${darkMatter} [RUN +${runMatter}]`:`✦ ${darkMatter}`;
+            if(hudDMEl.textContent!==v) hudDMEl.textContent=v;
+        }
     }
 
     if (isPlaying && screenShake > 0) { let dx = (Math.random() - 0.5) * 8; let dy = (Math.random() - 0.5) * 8; ctx.translate(dx, dy); screenShake--; }

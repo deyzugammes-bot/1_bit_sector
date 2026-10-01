@@ -7,7 +7,7 @@
   backdrop.id = 'backdropCanvas';
   backdrop.setAttribute('aria-hidden','true');
   mainCanvas.parentNode.insertBefore(backdrop, mainCanvas);
-  const bg = backdrop.getContext('2d');
+  const bg = backdrop.getContext('2d',{alpha:false});
   let bw = 0, bh = 0, bdpr = 1;
   let bgStars = [], dust = [];
 
@@ -20,18 +20,18 @@
   function cosmetic(slot,fallback){ try{return window.CosmeticsSystem?.getEquipped?.(slot)||fallback;}catch(e){return fallback;} }
 
   function resizeBackdrop(){
-    bdpr=Math.min(window.devicePixelRatio||1,2); bw=window.innerWidth; bh=window.innerHeight;
+    bdpr=Math.min(window.devicePixelRatio||1, window.__PERF_LITE__ ? 1 : 1.5); bw=window.innerWidth; bh=window.innerHeight;
     backdrop.width=Math.floor(bw*bdpr); backdrop.height=Math.floor(bh*bdpr);
     backdrop.style.width=bw+'px'; backdrop.style.height=bh+'px';
     bg.setTransform(bdpr,0,0,bdpr,0,0);
     bgStars=[]; dust=[];
-    const lowPower=((navigator.deviceMemory||4)<=2)||((navigator.hardwareConcurrency||8)<=4);
-    const count=Math.min(lowPower?100:150,Math.max(lowPower?55:75,Math.floor((bw*bh)/(lowPower?9000:6500))));
+    const lowPower=!!window.__PERF_LITE__ || ((navigator.deviceMemory||4)<=2)||((navigator.hardwareConcurrency||8)<=4);
+    const count=Math.min(lowPower?72:130,Math.max(lowPower?42:68,Math.floor((bw*bh)/(lowPower?12500:7500))));
     for(let i=0;i<count;i++){
       const layer=Math.random();
       bgStars.push({x:Math.random()*bw,y:Math.random()*bh,s:layer>.86?2:1,a:.15+layer*.55,v:.02+layer*.12,phase:Math.random()*6.28});
     }
-    for(let i=0;i<14;i++) dust.push({x:Math.random()*bw,y:Math.random()*bh,len:8+Math.random()*28,a:.03+Math.random()*.06});
+    for(let i=0;i<(window.__PERF_LITE__?6:14);i++) dust.push({x:Math.random()*bw,y:Math.random()*bh,len:8+Math.random()*28,a:.03+Math.random()*.06});
   }
   resizeBackdrop(); window.addEventListener('resize',resizeBackdrop);
 
@@ -65,7 +65,7 @@
   }
 
   let backdropLastFrame=0;
-  const backdropFrameMs=((navigator.deviceMemory||4)<=2||(navigator.hardwareConcurrency||8)<=4)?50:33;
+  const backdropFrameMs=window.__PERF_LITE__ ? 66 : (((navigator.deviceMemory||4)<=2||(navigator.hardwareConcurrency||8)<=4)?50:33);
   function drawBackdrop(t){
     if(document.hidden){ requestAnimationFrame(drawBackdrop); return; }
     if(t-backdropLastFrame<backdropFrameMs){ requestAnimationFrame(drawBackdrop); return; }
@@ -75,14 +75,14 @@
 
     // Subtle tactical grid.
     bg.save(); bg.strokeStyle=rgba(c,.035); bg.lineWidth=1;
-    const grid=48, ox=(t*.002)%grid, oy=(t*.003)%grid;
+    const grid=window.__PERF_LITE__?64:48, ox=window.__PERF_LITE__?0:(t*.002)%grid, oy=window.__PERF_LITE__?0:(t*.003)%grid;
     for(let x=-grid+ox;x<bw+grid;x+=grid){bg.beginPath();bg.moveTo(x,0);bg.lineTo(x,bh);bg.stroke();}
     for(let y=-grid+oy;y<bh+grid;y+=grid){bg.beginPath();bg.moveTo(0,y);bg.lineTo(bw,y);bg.stroke();}
     bg.restore();
 
     // Long scan vectors / dust.
     bg.save(); bg.strokeStyle=rgba(c,.08); bg.lineWidth=1;
-    dust.forEach(d=>{ bg.globalAlpha=d.a; bg.beginPath(); bg.moveTo(d.x,d.y); bg.lineTo(d.x+d.len,d.y-d.len*.22); bg.stroke(); });
+    if(!window.__PERF_LITE__) dust.forEach(d=>{ bg.globalAlpha=d.a; bg.beginPath(); bg.moveTo(d.x,d.y); bg.lineTo(d.x+d.len,d.y-d.len*.22); bg.stroke(); });
     bg.restore();
 
     // Multi-depth stars.
@@ -97,10 +97,13 @@
 
     eventGlyph(t,c);
 
-    // Edge vignette.
-    const g=bg.createRadialGradient(bw*.5,bh*.48,Math.min(bw,bh)*.18,bw*.5,bh*.48,Math.max(bw,bh)*.72);
-    g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,'rgba(0,0,0,.64)');
-    bg.fillStyle=g; bg.fillRect(0,0,bw,bh);
+    // Edge vignette. Skip the per-frame radial gradient in lite mode;
+    // CSS already supplies a cheap static vignette there.
+    if(!window.__PERF_LITE__){
+      const g=bg.createRadialGradient(bw*.5,bh*.48,Math.min(bw,bh)*.18,bw*.5,bh*.48,Math.max(bw,bh)*.72);
+      g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,'rgba(0,0,0,.64)');
+      bg.fillStyle=g; bg.fillRect(0,0,bw,bh);
+    }
     requestAnimationFrame(drawBackdrop);
   }
   requestAnimationFrame(drawBackdrop);
@@ -231,13 +234,18 @@
 
     ctx.save();ctx.translate(this.x,this.y);
     const pulse=.5+.5*Math.sin(t*.0032);
-    const glow=ctx.createRadialGradient(0,0,this.radius*.08,0,0,this.radius*1.28);
-    glow.addColorStop(0,'rgba(0,0,0,1)');
-    glow.addColorStop(.50,'rgba(0,0,0,.99)');
-    glow.addColorStop(.69,rgba(MAIN_C,.055+.035*pulse));
-    glow.addColorStop(.82,rgba(MAIN_C,.025));
-    glow.addColorStop(1,'rgba(0,0,0,0)');
-    ctx.fillStyle=glow;ctx.beginPath();ctx.arc(0,0,this.radius*1.28,0,Math.PI*2);ctx.fill();
+    if(window.__PERF_LITE__){
+      ctx.fillStyle='rgba(0,0,0,.98)';ctx.beginPath();ctx.arc(0,0,this.radius*1.08,0,Math.PI*2);ctx.fill();
+      ctx.strokeStyle=rgba(MAIN_C,.10+.04*pulse);ctx.lineWidth=1;ctx.beginPath();ctx.arc(0,0,this.radius*1.12,0,Math.PI*2);ctx.stroke();
+    }else{
+      const glow=ctx.createRadialGradient(0,0,this.radius*.08,0,0,this.radius*1.28);
+      glow.addColorStop(0,'rgba(0,0,0,1)');
+      glow.addColorStop(.50,'rgba(0,0,0,.99)');
+      glow.addColorStop(.69,rgba(MAIN_C,.055+.035*pulse));
+      glow.addColorStop(.82,rgba(MAIN_C,.025));
+      glow.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.fillStyle=glow;ctx.beginPath();ctx.arc(0,0,this.radius*1.28,0,Math.PI*2);ctx.fill();
+    }
 
     ctx.save();ctx.rotate(this.angle);
     for(let i=0;i<3;i++){
