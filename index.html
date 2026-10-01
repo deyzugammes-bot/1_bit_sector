@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>1-Bit Sector</title>
+    <link rel="stylesheet" href="style.css?v=59280">
+</head>
+<body>
+    <div id="scanlines"></div>
+    <canvas id="gameCanvas"></canvas>
+    
+    <!-- ІГРОВИЙ ІНТЕРФЕЙС (HUD) -->
+    <div id="gameHUD">
+        <span id="hudLevel">СЕКТОР: 001</span>
+        <span id="hudDM">✦ 0</span>
+        <span id="hudProtocols">PROTO: 0</span>
+        <button id="btnPauseGame" class="hud-pause" aria-label="Пауза">Ⅱ</button>
+    </div>
+    <div id="sectorAlert" class="sector-alert" aria-live="polite"></div>
+
+
+
+    <!-- CURRENT MENU / SHOP SHELL -->
+    <div id="shopUI">
+        <div class="shop-scroll">
+            <h1 id="shopTitle"></h1>
+            <p id="shopSubtitle" class="scan-reveal"></p>
+            <div id="runStats" class="run-stats"></div>
+            <div id="menuQuickNav" class="menu-quick-nav"></div>
+            <div id="retentionPanel" class="retention-panel"></div>
+            <div id="metaPanel" class="meta-panel"></div>
+            <div id="cosmeticsPanel" class="cosmetics-panel"></div>
+            <div id="protocolPanel" class="protocol-panel"></div>
+            <div id="adPanel" class="ad-panel"></div>
+        </div>
+        <div id="runResultDoubleDock" class="run-result-double-dock" aria-hidden="true"></div>
+        <div class="shop-footer scan-reveal">
+            <button id="btnRunResultDouble" class="v598-double run-result-double-static" type="button" aria-hidden="true">
+                <b>✦ ×2 DARK MATTER</b><span>REWARDED AD</span>
+            </button>
+            <button id="btnAction" class="main-btn">ПРОДОВЖИТИ &gt;&gt;</button>
+        </div>
+    </div>
+
+    <div id="pauseOverlay" class="pause-overlay" aria-hidden="true">
+        <div class="pause-card">
+            <div class="pause-kicker">SYSTEM // PAUSED</div>
+            <h2>ПАУЗА</h2>
+            <div class="pause-setting">
+                <div class="pause-setting-head"><span>ЗВУКИ</span><button id="btnPauseSfx" type="button">ON</button></div>
+                <input id="sfxVolume" type="range" min="0" max="100" value="95" aria-label="Гучність звуків">
+            </div>
+            <div class="pause-switches">
+                <button id="btnPauseShake" type="button">SHAKE // ON</button>
+                <button id="btnPauseHaptic" type="button">HAPTIC // ON</button>
+            </div>
+            <div class="pause-actions">
+                <button id="btnResumeGame" class="main-btn compact" type="button">ПРОДОВЖИТИ &gt;&gt;</button>
+                <button id="btnPauseEndRun" class="pause-end-run" type="button">ЗАВЕРШИТИ RUN</button>
+                <div id="pauseEndConfirm" class="pause-end-confirm" aria-hidden="true">
+                    <span id="pauseEndConfirmText">ТОЧНО ЗАВЕРШИТИ ПОТОЧНИЙ RUN?</span>
+                    <div>
+                        <button id="btnPauseEndCancel" type="button">СКАСУВАТИ</button>
+                        <button id="btnPauseEndConfirm" type="button">ЗАВЕРШИТИ RUN</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <div id="defeatOverlay" class="defeat-overlay" aria-hidden="true"></div>
+
+    <div id="onboardingOverlay" class="onboarding-overlay" aria-hidden="true">
+        <div class="onboarding-card">
+            <div class="onboarding-kicker">QUICK LINK // 20 SEC</div>
+            <div id="onboardingVisual" class="onboarding-visual"></div>
+            <h2 id="onboardingTitle"></h2>
+            <p id="onboardingText"></p>
+            <div id="onboardingDots" class="onboarding-dots"></div>
+            <div class="onboarding-actions">
+                <button id="btnOnboardingSkip" class="ghost-btn" type="button">ПРОПУСТИТИ</button>
+                <button id="btnOnboardingNext" class="main-btn compact" type="button">ДАЛІ &gt;&gt;</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="actTransition" class="act-transition" aria-hidden="true">
+        <div class="act-transition-inner">
+            <small>RUN SIGNAL ESCALATION</small>
+            <b id="actTransitionTitle">ACT II</b>
+            <span id="actTransitionText">AMPLIFIED PROTOCOLS // ENEMY PRESSURE UP</span>
+        </div>
+    </div>
+    <script src="main.js?v=59280"></script>
+    <script src="cosmetics.js?v=5.9"></script>
+    <script src="visual.js?v=59253"></script>
+    <script src="polish.js?v=5.9.21"></script>
+    <script src="ui.js?v=59260"></script>
+</body>
+</html>
