@@ -1549,9 +1549,9 @@ class Particle {
     draw() { ctx.globalAlpha = Math.max(0, this.life); ctx.fillStyle = THEMES[currentThemeIdx].color; ctx.fillRect(this.x, this.y, 2, 2); ctx.globalAlpha = 1.0; }
 }
 class FloatingText {
-    constructor(x, y, text) { this.x = x + (Math.random() - 0.5) * 20; this.y = y; this.text = text; this.life = 1.0; this.vy = -1.5; }
-    update() { this.y += this.vy; this.life -= 0.02; return this.life <= 0; }
-    draw() { ctx.globalAlpha = Math.max(0, this.life); ctx.fillStyle = THEMES[currentThemeIdx].color; ctx.font = "bold 14px monospace"; ctx.textAlign = "center"; ctx.fillText(this.text, this.x, this.y); ctx.globalAlpha = 1.0; }
+    constructor(x, y, text) { this.x = x + (Math.random() - 0.5) * 20; this.y = y; this.text = text; this.life = 1.0; this.vy = __perfLite ? -1.25 : -1.5; }
+    update() { this.y += this.vy; this.life -= __perfLite ? 0.04 : 0.02; return this.life <= 0; }
+    draw() { ctx.globalAlpha = Math.max(0, this.life); ctx.fillStyle = THEMES[currentThemeIdx].color; ctx.font = __perfLite ? "bold 11px monospace" : "bold 14px monospace"; ctx.textAlign = "center"; ctx.fillText(this.text, this.x, this.y); ctx.globalAlpha = 1.0; }
 }
 
 class AsteroidField {
@@ -1623,7 +1623,7 @@ class BlackHole {
         }
         ctx.globalAlpha = 1.0;
     }
-    checkCollision(unitX, unitY) { return Math.hypot(this.x - unitX, this.y - unitY) < this.radius + 15; }
+    checkCollision(unitX, unitY) { const dx=this.x-unitX,dy=this.y-unitY,r=this.radius+15; return dx*dx+dy*dy < r*r; }
 }
 
 class Node {
@@ -1769,23 +1769,27 @@ class Unit {
 
         const pe = __framePE || protocolEffects();
         let currentSpeed = this.baseSpeed * this.phaseBoost * (this.owner===1 ? sectorEventValue('speedPlayer',1) : sectorEventValue('speedEnemy',1)); if(this.owner===1 && Date.now()-sectorStartTime<20000) currentSpeed*=pe.openingSpeed;
-        for (let ast of asteroids) { if (Math.hypot(this.x - ast.x, this.y - ast.y) < ast.r) { currentSpeed *= (this.owner===1 ? pe.asteroidSlow : 0.4); break; } }
+        for (let ast of asteroids) { const ax=this.x-ast.x, ay=this.y-ast.y; if (ax*ax+ay*ay < ast.r*ast.r) { currentSpeed *= (this.owner===1 ? pe.asteroidSlow : 0.4); break; } }
         
         const dx = this.target.x - this.x; const dy = this.target.y - this.y; const dist = Math.sqrt(dx * dx + dy * dy);
         if (dist === 0) { this.hp = 0; return true; } 
 
         this.x += (dx / dist) * currentSpeed; this.y += (dy / dist) * currentSpeed; this.angle = Math.atan2(dy, dx); 
 
-        for (let bh of blackHoles) { 
-            if ((this.owner===1 && pe.blackholeSafe<1) ? Math.hypot(this.x-bh.x,this.y-bh.y) < (bh.radius+15)*pe.blackholeSafe : bh.checkCollision(this.x, this.y)) { 
-                this.suckedBy = bh; this.suckDist = Math.hypot(this.x - bh.x, this.y - bh.y); this.suckAngle = Math.atan2(this.y - bh.y, this.x - bh.x); window.PolishFX?.event('blackhole'); return false; 
-            } 
+        for (let bh of blackHoles) {
+            const bdx=this.x-bh.x,bdy=this.y-bh.y, baseR=bh.radius+15;
+            const safeR=(this.owner===1 && pe.blackholeSafe<1)?baseR*pe.blackholeSafe:baseR;
+            if (bdx*bdx+bdy*bdy < safeR*safeR) {
+                this.suckedBy = bh; this.suckDist = Math.sqrt(bdx*bdx+bdy*bdy); this.suckAngle = Math.atan2(bdy, bdx); window.PolishFX?.event('blackhole'); return false;
+            }
         }
         
         if (!this.teleported) {
             for (let wh of wormholes) {
-                if (Math.hypot(this.x - wh.x1, this.y - wh.y1) < 20) { this.x = wh.x2; this.y = wh.y2; this.teleported = true; window.PolishFX?.event('wormhole'); break; }
-                if (Math.hypot(this.x - wh.x2, this.y - wh.y2) < 20) { this.x = wh.x1; this.y = wh.y1; this.teleported = true; window.PolishFX?.event('wormhole'); break; }
+                let wx=this.x-wh.x1, wy=this.y-wh.y1;
+                if (wx*wx+wy*wy < 400) { this.x = wh.x2; this.y = wh.y2; this.teleported = true; window.PolishFX?.event('wormhole'); break; }
+                wx=this.x-wh.x2; wy=this.y-wh.y2;
+                if (wx*wx+wy*wy < 400) { this.x = wh.x1; this.y = wh.y1; this.teleported = true; window.PolishFX?.event('wormhole'); break; }
             }
         }
         if (dist < (this.target.radius || 20)) {
@@ -1806,18 +1810,25 @@ class Unit {
                 if (this.owner===1 && oldOwner>1) damage *= pe.enemyDamage; if(this.owner===1 && (this.target.isCapital||this.target.isBoss)) damage*=pe.bossDamage;
                 if (oldOwner === 1) damage = Math.max(0.5, (this.hp - ((dailyOperationActive?1:upgArmor) - 1) * 0.2) * pe.armor); 
                 this.target.unitsCount -= damage;
-                const __ftNow=performance.now();
-                if(!__perfLite || (floatingTexts.length<18 && __ftNow-(this.target.__lastFloatAt||0)>90)){
-                    this.target.__lastFloatAt=__ftNow; floatingTexts.push(new FloatingText(this.target.x, this.target.y - 20, `-${Math.ceil(damage)}`));
+                // Neutral damage numbers are intentionally hidden: they add visual noise and
+                // create many short-lived text objects during large captures on mobile WebViews.
+                if(oldOwner!==0){
+                    const __ftNow=performance.now();
+                    if(!__perfLite || (floatingTexts.length<6 && __ftNow-(this.target.__lastFloatAt||0)>180)){
+                        this.target.__lastFloatAt=__ftNow; floatingTexts.push(new FloatingText(this.target.x, this.target.y - 20, `-${Math.ceil(damage)}`));
+                    }
                 }
                 if (this.owner === 1) destroyedEnemies += damage; 
                 if (this.target.unitsCount <= 0) { 
                     this.target.owner = this.owner; this.target.unitsCount = Math.abs(this.target.unitsCount); if (this.owner===1 && oldOwner!==1 && currentSectorEvent?.captureBoost) this.target.unitsCount += currentSectorEvent.captureBoost;
                     if (this.owner===1 && oldOwner!==1) { runCaptured++; addDailyProgress('capture',1); window.PolishFX?.event('capture'); }
                     else if (this.owner>1 && oldOwner!==this.owner) { window.PolishFX?.event('enemyCapture'); }
-                    if (this.owner===1 && oldOwner!==1 && pe.captureBonus>0) { this.target.unitsCount += pe.captureBonus; if(!__perfLite || floatingTexts.length<18) floatingTexts.push(new FloatingText(this.target.x, this.target.y + 22, `+${Math.floor(pe.captureBonus)}`)); }
+                    if (this.owner===1 && oldOwner!==1 && pe.captureBonus>0) {
+                        this.target.unitsCount += pe.captureBonus;
+                        if(oldOwner!==0 && (!__perfLite || floatingTexts.length<4)) floatingTexts.push(new FloatingText(this.target.x, this.target.y + 22, `+${Math.floor(pe.captureBonus)}`));
+                    }
                     if(this.owner===1 && oldOwner!==1 && pe.capturePulse>0){ nodes.forEach(n=>{ if(n.owner===1 && n!==this.target) n.unitsCount+=pe.capturePulse; }); }
-                    screenShake = (window.GameFeedbackSettings?.shake===false ? 0 : 10); const pc=__perfLite?4:10; for (let p = 0; p < pc && particles.length<80; p++) particles.push(new Particle(this.target.x, this.target.y)); if(this.owner===1) window.CosmeticsFX?.capture?.(this.target.x,this.target.y);
+                    screenShake = (window.GameFeedbackSettings?.shake===false ? 0 : 10); const pc=__perfLite?2:10; for (let p = 0; p < pc && particles.length<80; p++) particles.push(new Particle(this.target.x, this.target.y)); if(this.owner===1) window.CosmeticsFX?.capture?.(this.target.x,this.target.y);
                 }
             }
             return true;
@@ -2108,8 +2119,9 @@ function spawnFleetPackets(startNode,target,actualSendCount,delayStep=72){
     const totalHp=startNode.owner===1
         ? Math.floor(actualSendCount/2)*(2+pe.unitHp)+(actualSendCount%2?1:0)
         : actualSendCount;
-    const lowPower=((navigator.deviceMemory||4)<=2)||((navigator.hardwareConcurrency||8)<=4);
-    const maxPackets=lowPower?9:13;
+    const lowPower=__perfLite||((navigator.deviceMemory||4)<=2)||((navigator.hardwareConcurrency||8)<=4);
+    // Fewer visual packets on Telegram/Firefox/mobile; total fleet HP stays exactly the same.
+    const maxPackets=__perfLite?6:(lowPower?8:13);
     const packetCount=Math.max(1,Math.min(originalObjects,maxPackets));
     const hpPerPacket=totalHp/packetCount;
     const spread=Math.min(720,Math.max(0,(packetCount-1)*delayStep));

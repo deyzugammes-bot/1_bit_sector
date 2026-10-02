@@ -428,7 +428,8 @@
       ctx.setLineDash([]);ctx.globalAlpha=1;ctx.fillStyle=MAIN_C;ctx.font='bold 8px monospace';ctx.textAlign='center';ctx.fillText(`WARDEN // T${tier}`,0,-r-27-tier*6);
     }
 
-    const dots=Math.min(12,Math.floor(this.unitsCount/4));ctx.fillStyle=own===0?rgba(MAIN_C,.35):MAIN_C;
+    const dotCap=window.__PERF_LITE__?(own===0?4:7):12;
+    const dots=Math.min(dotCap,Math.floor(this.unitsCount/4));ctx.fillStyle=own===0?rgba(MAIN_C,.35):MAIN_C;
     for(let i=0;i<dots;i++){const a=this.orbitAngle+i*Math.PI*2/Math.max(1,dots), rr=r+7+(i%2)*3;ctx.globalAlpha=.45+(i%3)*.18;ctx.fillRect(Math.cos(a)*rr-1,Math.sin(a)*rr-1,2,2);}ctx.globalAlpha=1;
 
     if(selectedNodes.includes(this)){
