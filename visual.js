@@ -65,7 +65,7 @@
   }
 
   let backdropLastFrame=0;
-  const backdropFrameMs=window.__PERF_LITE__ ? 66 : (((navigator.deviceMemory||4)<=2||(navigator.hardwareConcurrency||8)<=4)?50:33);
+  const backdropFrameMs=window.__PERF_LITE__ ? 83 : (((navigator.deviceMemory||4)<=2||(navigator.hardwareConcurrency||8)<=4)?50:33);
   function drawBackdrop(t){
     if(document.hidden){ requestAnimationFrame(drawBackdrop); return; }
     if(t-backdropLastFrame<backdropFrameMs){ requestAnimationFrame(drawBackdrop); return; }

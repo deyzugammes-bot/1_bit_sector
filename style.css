@@ -1721,3 +1721,14 @@ html.perf-lite .v596-epic,
 html.perf-lite .v596-corrupted{
   animation-duration:6s!important;
 }
+
+
+/* V1.0.2 adaptive Telegram performance: keep crisp gameplay first, degrade only if sustained FPS is low. */
+html.perf-lite:not(.perf-degraded) #scanlines{opacity:.19!important;}
+html.perf-degraded #scanlines{opacity:.11!important;}
+html.perf-degraded body::after{box-shadow:inset 0 0 34px rgba(0,0,0,.72)!important;}
+html.perf-degraded .v5922-core-socket.active::after,
+html.perf-degraded .v59256-hub-nav-btn::after,
+html.perf-degraded .v596-rare::after,
+html.perf-degraded .v596-epic,
+html.perf-degraded .v596-corrupted{animation:none!important;}

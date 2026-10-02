@@ -4,10 +4,13 @@ const __perfUA = navigator.userAgent || '';
 const __perfLite = window.matchMedia?.('(max-width: 700px)')?.matches || /Firefox|Telegram|; wv\)/i.test(__perfUA) || ((navigator.hardwareConcurrency||8) <= 4);
 window.__PERF_LITE__ = !!__perfLite;
 document.documentElement.classList.toggle('perf-lite', !!__perfLite);
+let __gameDprCap = __perfLite ? 1.5 : 2;
+let __lastCanvasW = 0, __lastCanvasH = 0, __resizeTimer = 0;
 function resizeCanvas() {
-    const dpr = Math.min(window.devicePixelRatio || 1, __perfLite ? 1.25 : 2);
+    const dpr = Math.min(window.devicePixelRatio || 1, __gameDprCap);
     const W = window.innerWidth;
     const H = window.innerHeight;
+    __lastCanvasW=W; __lastCanvasH=H;
     canvas.width = Math.floor(W * dpr);
     canvas.height = Math.floor(H * dpr);
     canvas.style.width = W + 'px';
@@ -15,7 +18,32 @@ function resizeCanvas() {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 resizeCanvas();
-window.addEventListener('resize', () => { resizeCanvas(); initStars(); });
+// Telegram/Android browser chrome can fire many resize events while its toolbar changes height.
+// Ignore small height-only changes and debounce real viewport/orientation changes.
+window.addEventListener('resize', () => {
+    clearTimeout(__resizeTimer);
+    __resizeTimer=setTimeout(()=>{
+        const W=window.innerWidth,H=window.innerHeight;
+        if(W===__lastCanvasW && Math.abs(H-__lastCanvasH)<180) return;
+        resizeCanvas();
+        try{ initStars(); }catch(e){}
+    },140);
+});
+let __adaptiveFrames=0, __adaptiveStart=performance.now(), __adaptiveSlow=0;
+function adaptivePerfTick(now){
+    if(!__perfLite) return;
+    __adaptiveFrames++;
+    const span=now-__adaptiveStart;
+    if(span<2500) return;
+    const fps=__adaptiveFrames*1000/span;
+    __adaptiveFrames=0; __adaptiveStart=now;
+    if(fps<42) __adaptiveSlow++; else __adaptiveSlow=0;
+    if(__adaptiveSlow>=2 && __gameDprCap>1.25){
+        __gameDprCap=1.25; __adaptiveSlow=0; resizeCanvas();
+        document.documentElement.classList.add('perf-degraded');
+    }
+}
+let __framePE=null;
 
 const pdParent = window.parent;
 let playdeckPlatform='unknown';
@@ -1570,9 +1598,14 @@ class BlackHole {
         ctx.save(); ctx.translate(this.x, this.y); 
         if (isPlaying) this.angle -= 0.02;
         
-        let grad = ctx.createRadialGradient(0, 0, 0, 0, 0, this.radius);
-        grad.addColorStop(0, '#000'); grad.addColorStop(0.5, 'rgba(0,0,0,0.9)'); grad.addColorStop(1, 'rgba(0,0,0,0)');
-        ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(0, 0, this.radius, 0, Math.PI*2); ctx.fill();
+        if(__perfLite){
+            ctx.fillStyle='rgba(0,0,0,.92)'; ctx.beginPath(); ctx.arc(0,0,this.radius*.78,0,Math.PI*2); ctx.fill();
+            ctx.strokeStyle='rgba(255,255,255,.10)'; ctx.lineWidth=1; ctx.beginPath(); ctx.arc(0,0,this.radius*.92,0,Math.PI*2); ctx.stroke();
+        } else {
+            let grad = ctx.createRadialGradient(0, 0, 0, 0, 0, this.radius);
+            grad.addColorStop(0, '#000'); grad.addColorStop(0.5, 'rgba(0,0,0,0.9)'); grad.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(0, 0, this.radius, 0, Math.PI*2); ctx.fill();
+        }
 
         ctx.rotate(this.angle);
         ctx.strokeStyle = MAIN_C; ctx.lineWidth = 2; ctx.setLineDash([4, 25]);
@@ -1622,7 +1655,7 @@ class Node {
         let dmg = this.isCapital ? 4 : 2;
         let cd = this.isCapital ? 15 : 35;
         if (this.isBoss) { const t=this.bossTier||1; range=170+t*18; dmg=4.5+t*1.35; cd=Math.max(7,14-t*2); }
-        if (this.owner === 1) { const pe=protocolEffects(); dmg += pe.turretDamage + (this.isCapital ? pe.capitalTurret : 0); cd = Math.max(6, Math.round(cd * pe.turretCooldown)); } 
+        if (this.owner === 1) { const pe=__framePE || protocolEffects(); dmg += pe.turretDamage + (this.isCapital ? pe.capitalTurret : 0); cd = Math.max(6, Math.round(cd * pe.turretCooldown)); } 
         let numTurrets = this.isBoss ? 2+(this.bossTier||1) : (this.isCapital ? 2 : 1);
         
         // POINT DEFENSE: Стріляємо ТІЛЬКИ по тих, хто летить атакувати САМЕ ЦЮ БАЗУ
@@ -1639,7 +1672,7 @@ class Node {
                 if (distToTarget < bestDist) { bestDist = distToTarget; shootX = tx; shootY = ty; }
             }
 
-            lasers.push({ x1: shootX, y1: shootY, x2: target.x, y2: target.y, life: 1.0 }); 
+            if(!__perfLite || lasers.length<32) lasers.push({ x1: shootX, y1: shootY, x2: target.x, y2: target.y, life: 1.0 }); 
             target.hp -= dmg; 
             this.laserCooldown = cd; 
         }
@@ -1723,7 +1756,7 @@ class Unit {
     }
     update() {
         if (isNaN(this.x) || isNaN(this.y)) { this.hp = 0; return true; }
-        if (this.hp <= 0) { for (let p = 0; p < 3; p++) particles.push(new Particle(this.x, this.y)); return true; }
+        if (this.hp <= 0) { const pc=__perfLite?1:3; for (let p = 0; p < pc && particles.length<80; p++) particles.push(new Particle(this.x, this.y)); return true; }
         
         if (this.suckedBy) {
             this.suckAngle += 0.15; this.suckDist -= 1.5; 
@@ -1734,8 +1767,8 @@ class Unit {
             return false;
         }
 
-        let currentSpeed = this.baseSpeed * this.phaseBoost * (this.owner===1 ? sectorEventValue('speedPlayer',1) : sectorEventValue('speedEnemy',1)); if(this.owner===1 && Date.now()-sectorStartTime<20000) currentSpeed*=protocolEffects().openingSpeed;
-        const pe = protocolEffects();
+        const pe = __framePE || protocolEffects();
+        let currentSpeed = this.baseSpeed * this.phaseBoost * (this.owner===1 ? sectorEventValue('speedPlayer',1) : sectorEventValue('speedEnemy',1)); if(this.owner===1 && Date.now()-sectorStartTime<20000) currentSpeed*=pe.openingSpeed;
         for (let ast of asteroids) { if (Math.hypot(this.x - ast.x, this.y - ast.y) < ast.r) { currentSpeed *= (this.owner===1 ? pe.asteroidSlow : 0.4); break; } }
         
         const dx = this.target.x - this.x; const dy = this.target.y - this.y; const dist = Math.sqrt(dx * dx + dy * dy);
@@ -1744,7 +1777,7 @@ class Unit {
         this.x += (dx / dist) * currentSpeed; this.y += (dy / dist) * currentSpeed; this.angle = Math.atan2(dy, dx); 
 
         for (let bh of blackHoles) { 
-            if ((this.owner===1 && protocolEffects().blackholeSafe<1) ? Math.hypot(this.x-bh.x,this.y-bh.y) < (bh.radius+15)*protocolEffects().blackholeSafe : bh.checkCollision(this.x, this.y)) { 
+            if ((this.owner===1 && pe.blackholeSafe<1) ? Math.hypot(this.x-bh.x,this.y-bh.y) < (bh.radius+15)*pe.blackholeSafe : bh.checkCollision(this.x, this.y)) { 
                 this.suckedBy = bh; this.suckDist = Math.hypot(this.x - bh.x, this.y - bh.y); this.suckAngle = Math.atan2(this.y - bh.y, this.x - bh.x); window.PolishFX?.event('blackhole'); return false; 
             } 
         }
@@ -1772,15 +1805,19 @@ class Unit {
                 if (this.owner===1 && oldOwner===0) damage *= pe.neutralDamage;
                 if (this.owner===1 && oldOwner>1) damage *= pe.enemyDamage; if(this.owner===1 && (this.target.isCapital||this.target.isBoss)) damage*=pe.bossDamage;
                 if (oldOwner === 1) damage = Math.max(0.5, (this.hp - ((dailyOperationActive?1:upgArmor) - 1) * 0.2) * pe.armor); 
-                this.target.unitsCount -= damage; floatingTexts.push(new FloatingText(this.target.x, this.target.y - 20, `-${Math.ceil(damage)}`));
+                this.target.unitsCount -= damage;
+                const __ftNow=performance.now();
+                if(!__perfLite || (floatingTexts.length<18 && __ftNow-(this.target.__lastFloatAt||0)>90)){
+                    this.target.__lastFloatAt=__ftNow; floatingTexts.push(new FloatingText(this.target.x, this.target.y - 20, `-${Math.ceil(damage)}`));
+                }
                 if (this.owner === 1) destroyedEnemies += damage; 
                 if (this.target.unitsCount <= 0) { 
                     this.target.owner = this.owner; this.target.unitsCount = Math.abs(this.target.unitsCount); if (this.owner===1 && oldOwner!==1 && currentSectorEvent?.captureBoost) this.target.unitsCount += currentSectorEvent.captureBoost;
                     if (this.owner===1 && oldOwner!==1) { runCaptured++; addDailyProgress('capture',1); window.PolishFX?.event('capture'); }
                     else if (this.owner>1 && oldOwner!==this.owner) { window.PolishFX?.event('enemyCapture'); }
-                    if (this.owner===1 && oldOwner!==1 && pe.captureBonus>0) { this.target.unitsCount += pe.captureBonus; floatingTexts.push(new FloatingText(this.target.x, this.target.y + 22, `+${Math.floor(pe.captureBonus)}`)); }
+                    if (this.owner===1 && oldOwner!==1 && pe.captureBonus>0) { this.target.unitsCount += pe.captureBonus; if(!__perfLite || floatingTexts.length<18) floatingTexts.push(new FloatingText(this.target.x, this.target.y + 22, `+${Math.floor(pe.captureBonus)}`)); }
                     if(this.owner===1 && oldOwner!==1 && pe.capturePulse>0){ nodes.forEach(n=>{ if(n.owner===1 && n!==this.target) n.unitsCount+=pe.capturePulse; }); }
-                    screenShake = (window.GameFeedbackSettings?.shake===false ? 0 : 10); for (let p = 0; p < 10; p++) particles.push(new Particle(this.target.x, this.target.y)); if(this.owner===1) window.CosmeticsFX?.capture?.(this.target.x,this.target.y);
+                    screenShake = (window.GameFeedbackSettings?.shake===false ? 0 : 10); const pc=__perfLite?4:10; for (let p = 0; p < pc && particles.length<80; p++) particles.push(new Particle(this.target.x, this.target.y)); if(this.owner===1) window.CosmeticsFX?.capture?.(this.target.x,this.target.y);
                 }
             }
             return true;
@@ -2330,11 +2367,13 @@ setInterval(() => {
 let __lastHudRefresh = 0;
 function gameLoop(now=performance.now()) {
     telemetryFrameTick();
+    adaptivePerfTick(now);
     let MAIN_C = THEMES[currentThemeIdx].color;
     ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
     
     ctx.save();
     let isPlaying = (gameState === 'playing');
+    __framePE = isPlaying ? protocolEffects() : null;
     
     // DOM writes every frame are expensive in Telegram WebView/Firefox.
     // HUD only needs a few updates per second; gameplay canvas still renders normally.
@@ -2395,7 +2434,7 @@ function gameLoop(now=performance.now()) {
     nodes.forEach(node => node.draw(MAIN_C, isPlaying));
     try { window.CosmeticsFX?.draw?.(ctx, MAIN_C, isPlaying); } catch(e){}
 
-    ctx.restore(); requestAnimationFrame(gameLoop);
+    ctx.restore(); __framePE=null; requestAnimationFrame(gameLoop);
 }
 // Initial state boot is deferred until the current UI layer is loaded.
 // This prevents legacy menu renderers from drawing an old screen before the modern UI overrides are installed.
