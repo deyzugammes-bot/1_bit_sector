@@ -94,6 +94,7 @@
   const scheduleBackdrop=()=>{ if(window.__PERF_LITE__) setTimeout(()=>requestAnimationFrame(drawBackdrop),72); else requestAnimationFrame(drawBackdrop); };
   function drawBackdrop(t){
     if(document.hidden){ scheduleBackdrop(); return; }
+    if(window.__GECKO_COMPAT__ && document.body.classList.contains('game-running')){ setTimeout(scheduleBackdrop,420); return; }
     if(t-backdropLastFrame<backdropFrameMs){ scheduleBackdrop(); return; }
     backdropLastFrame=t;
     const c=theme(); bg.clearRect(0,0,bw,bh);

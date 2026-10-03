@@ -1,10 +1,33 @@
 const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
 const __perfUA = navigator.userAgent || '';
+const __geckoCompat = /Firefox\//i.test(__perfUA);
+const ctx = canvas.getContext('2d', __geckoCompat ? {alpha:false, desynchronized:true} : undefined);
 const __perfLite = window.matchMedia?.('(max-width: 700px)')?.matches || /Firefox|Telegram|; wv\)/i.test(__perfUA) || ((navigator.hardwareConcurrency||8) <= 4);
 window.__PERF_LITE__ = !!__perfLite;
+window.__GECKO_COMPAT__ = !!__geckoCompat;
 document.documentElement.classList.toggle('perf-lite', !!__perfLite);
+document.documentElement.classList.toggle('gecko-compat', !!__geckoCompat);
 let __gameDprCap = __perfLite ? 1.5 : 2;
+let __compatBgCanvas=null,__compatBgCtx=null,__compatBgW=0,__compatBgH=0,__compatBgTheme='';
+function __buildCompatBackground(color){
+    if(!__geckoCompat)return;
+    const W=window.innerWidth,H=window.innerHeight;
+    if(__compatBgCanvas&&__compatBgW===W&&__compatBgH===H&&__compatBgTheme===color)return;
+    __compatBgW=W;__compatBgH=H;__compatBgTheme=color;
+    if(!__compatBgCanvas){__compatBgCanvas=document.createElement('canvas');__compatBgCtx=__compatBgCanvas.getContext('2d',{alpha:false});}
+    __compatBgCanvas.width=Math.max(1,W);__compatBgCanvas.height=Math.max(1,H);
+    const g=__compatBgCtx;g.setTransform(1,0,0,1,0,0);g.fillStyle='#020303';g.fillRect(0,0,W,H);
+    const hex=(color||'#ffffff').replace('#','');
+    const r=parseInt(hex.slice(0,2),16)||255,gg=parseInt(hex.slice(2,4),16)||255,b=parseInt(hex.slice(4,6),16)||255;
+    g.strokeStyle=`rgba(${r},${gg},${b},.045)`;g.lineWidth=1;
+    for(let x=0;x<W;x+=64){g.beginPath();g.moveTo(x+.5,0);g.lineTo(x+.5,H);g.stroke();}
+    for(let y=0;y<H;y+=64){g.beginPath();g.moveTo(0,y+.5);g.lineTo(W,y+.5);g.stroke();}
+    let seed=((W*73856093)^(H*19349663))>>>0;const rnd=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;};
+    g.fillStyle=color||'#fff';const count=Math.min(78,Math.max(42,Math.floor(W*H/11000)));
+    for(let i=0;i<count;i++){g.globalAlpha=.14+rnd()*.34;const sz=rnd()>.88?2:1;g.fillRect(Math.floor(rnd()*W),Math.floor(rnd()*H),sz,sz);}g.globalAlpha=1;
+    const vg=g.createRadialGradient(W*.5,H*.48,Math.min(W,H)*.22,W*.5,H*.48,Math.max(W,H)*.72);vg.addColorStop(0,'rgba(0,0,0,0)');vg.addColorStop(1,'rgba(0,0,0,.58)');g.fillStyle=vg;g.fillRect(0,0,W,H);
+    g.fillStyle='rgba(0,0,0,.055)';for(let y=0;y<H;y+=4)g.fillRect(0,y,W,1);
+}
 let __lastCanvasW = 0, __lastCanvasH = 0, __resizeTimer = 0;
 function resizeCanvas() {
     const dpr = Math.min(window.devicePixelRatio || 1, __gameDprCap);
@@ -31,7 +54,7 @@ window.addEventListener('resize', () => {
 });
 let __adaptiveFrames=0, __adaptiveStart=performance.now(), __adaptiveSlow=0;
 function adaptivePerfTick(now){
-    if(!__perfLite) return;
+    if(!__perfLite || __geckoCompat) return;
     __adaptiveFrames++;
     const span=now-__adaptiveStart;
     if(span<2500) return;
@@ -2411,10 +2434,7 @@ function prepareAiCycle(now){
     };
     __aiNextCycleAt=now+1500;
 }
-let __diagAiLast=0,__diagAiMax=0,__diagAiAt=0;
 function processOneAiNode(now){
-    const __diagAiStart=performance.now();
-    try {
     if(gameState!=='playing'){__aiQueue.length=0;__aiCycleCtx=null;return;}
     if(!__aiQueue.length){ if(now>=__aiNextCycleAt)prepareAiCycle(now); else return; }
     const node=__aiQueue.shift(); if(!node||node.owner<=1)return;
@@ -2436,11 +2456,6 @@ function processOneAiNode(now){
     c.actionsByOwner[node.owner]=(c.actionsByOwner[node.owner]||0)+1;
     window.PolishFX?.event('enemySend');
     spawnFleetPackets(node,action.target,actualSendCount,78);
-    } finally {
-        __diagAiLast=performance.now()-__diagAiStart;
-        if(__diagAiLast>__diagAiMax)__diagAiMax=__diagAiLast;
-        __diagAiAt=performance.now();
-    }
 }
 // Stagger AI decisions so Firefox/Telegram do not receive one large 1.5 s CPU spike.
 setInterval(()=>processOneAiNode(Date.now()),__perfLite?110:80);
@@ -2448,52 +2463,7 @@ setInterval(()=>processOneAiNode(Date.now()),__perfLite?110:80);
 let __lastHudRefresh = 0;
 let __lastWinLossCheck=0;
 let __lastPlayingClass=null;
-
-// V1.0.5 DIAGNOSTIC BUILD --------------------------------------------------
-// Lightweight frame diagnostics for Firefox / Telegram WebView. This build is
-// for measurement only; it does not alter gameplay logic or balance.
-const __diag={lastRaf:0,frames:[],js:[],spike50:0,spike100:0,maxFrame:0,maxJs:0,worst:null,lastPaint:0,resizeCount:0};
-let __diagOverlay=null;
-function __diagEnsureOverlay(){
-    if(__diagOverlay)return __diagOverlay;
-    const el=document.createElement('div');
-    el.id='perfDiagnostic';
-    el.innerHTML='<b>PERF DIAG</b><pre>waiting…</pre><small>Screenshot this during/after a freeze</small>';
-    document.body.appendChild(el);__diagOverlay=el;return el;
-}
-function __diagPush(arr,v,max=180){arr.push(v);if(arr.length>max)arr.shift();}
-function __diagPercentile(arr,p){if(!arr.length)return 0;const a=arr.slice().sort((x,y)=>x-y);return a[Math.min(a.length-1,Math.floor((a.length-1)*p))]||0;}
-function __diagPaint(now){
-    if(now-__diag.lastPaint<300)return;__diag.lastPaint=now;
-    const el=__diagEnsureOverlay(),pre=el.querySelector('pre');if(!pre)return;
-    const f=__diag.frames,j=__diag.js;
-    const avg=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:0;
-    const fps=avg(f)>0?1000/avg(f):0;
-    const ua=navigator.userAgent||'';
-    const engine=/Firefox\//i.test(ua)?'FIREFOX':(/Telegram/i.test(ua)?'TELEGRAM':'WEBVIEW/CHROMIUM');
-    const worst=__diag.worst||{};
-    pre.textContent=
-`ENGINE ${engine}  LITE ${window.__PERF_LITE__?'ON':'OFF'}
-`+
-`FPS ${fps.toFixed(0)}  FRAME avg ${avg(f).toFixed(1)}  p95 ${__diagPercentile(f,.95).toFixed(1)}  max ${__diag.maxFrame.toFixed(1)} ms
-`+
-`JS    avg ${avg(j).toFixed(1)}  p95 ${__diagPercentile(j,.95).toFixed(1)}  max ${__diag.maxJs.toFixed(1)} ms
-`+
-`AI last ${__diagAiLast.toFixed(1)}  max ${__diagAiMax.toFixed(1)} ms
-`+
-`SPIKES >50 ${__diag.spike50}  >100 ${__diag.spike100}
-`+
-`UNITS ${units?.length||0}  PART ${particles?.length||0}  TEXT ${floatingTexts?.length||0}  LASER ${lasers?.length||0}
-`+
-`CANVAS ${canvas.width}x${canvas.height}  DPR ${(window.devicePixelRatio||1).toFixed(2)}
-`+
-`WORST f=${(worst.frame||0).toFixed(1)} js=${(worst.js||0).toFixed(1)} u=${worst.units||0} p=${worst.particles||0} t=${worst.texts||0}`;
-}
-window.addEventListener('resize',()=>{__diag.resizeCount++;},{passive:true});
-
 function gameLoop(now=performance.now()) {
-    const __diagLoopStart=performance.now();
-    const __diagFrameDt=__diag.lastRaf?now-__diag.lastRaf:16.7;__diag.lastRaf=now;
     telemetryFrameTick();
     adaptivePerfTick(now);
     __frameWallNow=Date.now();
@@ -2501,7 +2471,13 @@ function gameLoop(now=performance.now()) {
     window.__GAME_FRAME_ID__=__gameFrameId;
     window.__GAME_FRAME_NOW__=now;
     let MAIN_C = THEMES[currentThemeIdx].color;
-    ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+    if(__geckoCompat){
+        __buildCompatBackground(MAIN_C);
+        ctx.setTransform(Math.min(window.devicePixelRatio||1,__gameDprCap),0,0,Math.min(window.devicePixelRatio||1,__gameDprCap),0,0);
+        ctx.drawImage(__compatBgCanvas,0,0,window.innerWidth,window.innerHeight);
+    }else{
+        ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+    }
     
     ctx.save();
     let isPlaying = (gameState === 'playing');
@@ -2570,18 +2546,7 @@ function gameLoop(now=performance.now()) {
     nodes.forEach(node => node.draw(MAIN_C, isPlaying));
     try { window.CosmeticsFX?.draw?.(ctx, MAIN_C, isPlaying); } catch(e){}
 
-    ctx.restore(); __framePE=null;
-    const __diagJs=performance.now()-__diagLoopStart;
-    if(gameState==='playing'){
-        __diagPush(__diag.frames,__diagFrameDt);__diagPush(__diag.js,__diagJs);
-        if(__diagFrameDt>__diag.maxFrame)__diag.maxFrame=__diagFrameDt;
-        if(__diagJs>__diag.maxJs)__diag.maxJs=__diagJs;
-        if(__diagFrameDt>50)__diag.spike50++;
-        if(__diagFrameDt>100)__diag.spike100++;
-        if(!__diag.worst||__diagFrameDt>(__diag.worst.frame||0))__diag.worst={frame:__diagFrameDt,js:__diagJs,units:units?.length||0,particles:particles?.length||0,texts:floatingTexts?.length||0,ai:__diagAiLast};
-        __diagPaint(now);
-    }
-    requestAnimationFrame(gameLoop);
+    ctx.restore(); __framePE=null; requestAnimationFrame(gameLoop);
 }
 // Initial state boot is deferred until the current UI layer is loaded.
 // This prevents legacy menu renderers from drawing an old screen before the modern UI overrides are installed.

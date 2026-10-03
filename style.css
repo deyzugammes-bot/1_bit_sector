@@ -1740,5 +1740,13 @@ body.game-running #shopUI *,
 body.game-running #shopUI *::before,
 body.game-running #shopUI *::after{animation-play-state:paused!important;}
 
-/* V1.0.5 diagnostic overlay */
-#perfDiagnostic{position:fixed;z-index:99999;left:6px;bottom:6px;width:min(330px,calc(100vw - 12px));box-sizing:border-box;padding:7px 8px;background:rgba(0,0,0,.86);border:1px solid rgba(255,255,255,.65);color:#fff;font:10px/1.32 monospace;pointer-events:none;text-align:left;white-space:normal}#perfDiagnostic b{font-size:10px;letter-spacing:.12em}#perfDiagnostic pre{margin:4px 0 2px;white-space:pre-wrap;font:9px/1.35 monospace;color:#fff}#perfDiagnostic small{font-size:7px;opacity:.55}
+
+/* V1.0.6 — Gecko single-canvas gameplay path.
+   Firefox spends little time in our JS but stalls in paint/composition, so while
+   gameplay is active keep only the main canvas as the full-screen composited layer. */
+html.gecko-compat body.game-running #backdropCanvas,
+html.gecko-compat body.game-running #scanlines,
+html.gecko-compat body.game-running::after{display:none!important;}
+html.gecko-compat body.game-running canvas{filter:none!important;transition:none!important;}
+html.gecko-compat body.game-running #gameCanvas{opacity:1!important;transform:none!important;will-change:auto!important;}
+html.gecko-compat body.game-running #gameHUD{backdrop-filter:none!important;-webkit-backdrop-filter:none!important;box-shadow:none!important;}
