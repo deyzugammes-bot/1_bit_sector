@@ -233,27 +233,25 @@
     el.classList.remove('show'); void el.offsetWidth; el.classList.add('show'); el.setAttribute('aria-hidden','false'); event('act');
     setTimeout(()=>{el.classList.remove('show');el.setAttribute('aria-hidden','true');},1580);
   }
-  let lastMonitorTick=0;
-  function monitor(now=performance.now()){
-    if(now-lastMonitorTick<180){ requestAnimationFrame(monitor); return; }
-    lastMonitorTick=now;
+  function monitor(){
     try {
       if(gameState==='playing' && (currentLevel!==lastLevel || lastGameState!=='playing')) showAct(currentLevel);
       const evKey = currentSectorEvent ? `${currentSectorEvent.kind}:${currentSectorEvent.name||currentSectorEvent.title||''}:${currentLevel}` : '';
       if(evKey && evKey !== lastSectorEventKey && currentSectorEvent?.kind==='event') event('anomaly');
       lastSectorEventKey = evKey;
       if(Array.isArray(nodes)){
-        nodes.forEach(n=>{
-          const prev = lastNodeOwners.get(n);
+        for(let i=0;i<nodes.length;i++){
+          const n=nodes[i],prev=lastNodeOwners.get(n);
           if(prev!==undefined && prev!==n.owner && n.owner>1) event('enemyCapture');
           lastNodeOwners.set(n,n.owner);
-        });
+        }
       }
       lastLevel=currentLevel; lastGameState=gameState;
     } catch(e){}
-    requestAnimationFrame(monitor);
   }
-  requestAnimationFrame(monitor);
+  // This is state monitoring, not rendering: a timer avoids an extra RAF callback every frame.
+  setInterval(monitor,200);
+  monitor();
 
   // --- Hook high-value game moments without changing the simulation. ---
   try {

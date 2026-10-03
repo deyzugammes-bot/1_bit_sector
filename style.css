@@ -1732,3 +1732,10 @@ html.perf-degraded .v59256-hub-nav-btn::after,
 html.perf-degraded .v596-rare::after,
 html.perf-degraded .v596-epic,
 html.perf-degraded .v596-corrupted{animation:none!important;}
+
+/* V1.0.4 — Firefox / Telegram gameplay smoothness.
+   Keep off-screen shop content from animating/painting while the sector is active. */
+body.game-running #shopUI:not(.open){visibility:hidden!important;pointer-events:none!important;}
+body.game-running #shopUI *,
+body.game-running #shopUI *::before,
+body.game-running #shopUI *::after{animation-play-state:paused!important;}
